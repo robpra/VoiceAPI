@@ -1,0 +1,33 @@
+2025-11-19T17:22:49Z | callId=NO-CALLID | seq=5 | Enviado: {
+  "evento": "agent.Ready",
+  "idusuario": "cPerez",
+  "usuario": "Choland Perez",
+  "agente": "2020",
+  "cliente": "COPSA",
+  "servicio": "6321",
+  "timestamp": "2025-11-19T17:22:49Z",
+  "uuid": "a03805a7-f487-4482-bf00-bc4fb4c0cf44",
+  "sequence": 5
+}
+2025-11-19T17:33:11Z | callId=NO-CALLID | seq=6 | Enviado: {
+  "evento": "agent.NotReady",
+  "idusuario": "cPerez",
+  "usuario": "Choland Perez",
+  "agente": "2020",
+  "cliente": "COPSA",
+  "servicio": "6321",
+  "timestamp": "2025-11-19T17:33:11Z",
+  "uuid": "a021c51c-3bc1-4ada-8422-d5d9c75da7d2",
+  "sequence": 6
+}
+2025-11-19T17:38:33Z | callId=NO-CALLID | seq=7 | Enviado: {
+  "evento": "agent.NotReady",
+  "idusuario": "cPerez",
+  "usuario": "Choland Perez",
+  "agente": "2020",
+  "cliente": "COPSA",
+  "servicio": "6321",
+  "timestamp": "2025-11-19T17:38:33Z",
+  "uuid": "1716dc92-15e5-4d0d-acc9-40604acd045b",
+  "sequence": 7
+}

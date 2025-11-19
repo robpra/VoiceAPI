@@ -1,0 +1,6 @@
+@VoiceAPI_HostAddress = http://localhost:5299
+
+GET {{VoiceAPI_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
