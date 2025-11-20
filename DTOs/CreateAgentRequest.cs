@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 namespace VoiceAPI.DTOs
 {
     public class CreateAgentRequest
@@ -7,11 +9,13 @@ namespace VoiceAPI.DTOs
         public string IdUsuario { get; set; } = "";
         public string Nombre { get; set; } = "";
         public string Apellido { get; set; } = "";
-        public string Rol { get; set; } = "";  // agente o administrativo
-        public string IdAgente { get; set; } = "";
+        public string Rol { get; set; } = "";  // agente | administrativo
+
+        public string? IdAgente { get; set; }
         public string? Interno { get; set; }
-        public string Servicios { get; set; } = "";
-        public string Prioridad { get; set; } = "";
+
+        // Nueva estructura JSON
+        public List<ServicioItem>? Servicios { get; set; }
     }
 }
 
