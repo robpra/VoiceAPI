@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("VoiceAPI")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+20d273667f034f40329e793dda946921300435e2")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+393d2043095fea092d613f2d1fc84a74ef67897a")]
 [assembly: System.Reflection.AssemblyProductAttribute("VoiceAPI")]
 [assembly: System.Reflection.AssemblyTitleAttribute("VoiceAPI")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

@@ -1,0 +1,50 @@
+using Microsoft.EntityFrameworkCore;
+using VoiceAPI.Data;
+
+var builder = WebApplication.CreateBuilder(args);
+
+// ==========================================================
+// Servicios principales
+// ==========================================================
+builder.Services.AddControllers();
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
+
+// ==========================================================
+// Configurar MariaDB usando "MySqlConnection"
+// ==========================================================
+builder.Services.AddDbContext<AgentContext>(options =>
+    options.UseMySql(
+        builder.Configuration.GetConnectionString("MySqlConnection"),
+        new MySqlServerVersion(new Version(10, 5, 0)) // MariaDB 10.5+
+    )
+);
+
+// ==========================================================
+// CORS
+// ==========================================================
+builder.Services.AddCors(policy =>
+{
+    policy.AddPolicy("AllowAll",
+        p => p.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader()
+    );
+});
+
+var app = builder.Build();
+
+// ==========================================================
+// Middleware
+// ==========================================================
+app.UseCors("AllowAll");
+
+app.UseSwagger();
+app.UseSwaggerUI();
+
+
+app.MapControllers();
+
+// ==========================================================
+// Arrancar API
+// ==========================================================
+app.Run();
+
