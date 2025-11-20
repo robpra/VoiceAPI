@@ -1,0 +1,11 @@
+bin/
+obj/
+*.log
+*.db
+*.sqlite
+*.tmp
+*.cache
+*.user
+.vscode/
+.idea/
+*.old
