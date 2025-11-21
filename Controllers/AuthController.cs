@@ -17,14 +17,14 @@ namespace VoiceAPI.Controllers
     [Route("api/[controller]")]
     public class AuthController : ControllerBase
     {
-        private readonly AgentDbContext _db;
+        private readonly AgentContext _db;               // FIX 1
         private readonly PBXManager _pbx;
         private readonly ExtensionAllocator _ext;
         private readonly IConfiguration _config;
         private readonly IHubContext<EventsHub> _hub;
 
         public AuthController(
-            AgentDbContext db,
+            AgentContext db,                            // FIX 2
             PBXManager pbx,
             ExtensionAllocator ext,
             IConfiguration config,
@@ -53,7 +53,7 @@ namespace VoiceAPI.Controllers
             }
 
             // --------------------------------------------------------
-            // 1) VALIDAR EN BD
+            // 1) VALIDAR EN BD (YA FUNCIONA)
             // --------------------------------------------------------
             var agente = _db.UsuariosTelefonia
                 .FirstOrDefault(a =>
@@ -70,7 +70,7 @@ namespace VoiceAPI.Controllers
             }
 
             // --------------------------------------------------------
-            // 2) PBX POR CLIENTE
+            // 2) PBX POR CLIENTe
             // --------------------------------------------------------
             var pbx = _pbx.GetPBXByCliente(req.cliente ?? "");
             if (pbx == null)
@@ -89,51 +89,28 @@ namespace VoiceAPI.Controllers
             // --------------------------------------------------------
             // 3) EXTENSIÓN
             // --------------------------------------------------------
+            string extension;
 
+            if (agente.Rol.Equals("administrativo", StringComparison.OrdinalIgnoreCase))
+            {
+                extension = agente.Interno!;
+            }
+            else
+            {
+                extension = await _ext.GetFreeExtension(pbx);
+            }
 
-// AGENTE → asignación dinámica
-// ADMIN → usa su interno fijo
-string extension;
-
-if (agente.Rol.Equals("administrativo", StringComparison.OrdinalIgnoreCase))
-{
-    extension = agente.Interno!;
-}
-else
-{
-    var pbxSection = _pbx.GetPBXByCliente(req.cliente ?? "");
-
-    if (pbxSection == null)
-    {
-        return BadRequest(new
-        {
-            resultado = "ERROR",
-            mensaje = $"El cliente '{req.cliente}' no tiene PBX asignada"
-        });
-    }
-
-    extension = await _ext.GetFreeExtension(pbxSection);
-}
-
-
-if (string.IsNullOrWhiteSpace(extension))
-{
-    return BadRequest(new
-    {
-        resultado = "ERROR",
-        mensaje = "No hay internos libres para asignar"
-    });
-}
-
-
-
-
-
-
-
+            if (string.IsNullOrWhiteSpace(extension))
+            {
+                return BadRequest(new
+                {
+                    resultado = "ERROR",
+                    mensaje = "No hay internos libres para asignar"
+                });
+            }
 
             // --------------------------------------------------------
-            // 4) PROVISION PARA SIGNALR
+            // 4) PROVISION WEBRTC
             // --------------------------------------------------------
             var provision = new
             {
@@ -150,25 +127,21 @@ if (string.IsNullOrWhiteSpace(extension))
             };
 
             // --------------------------------------------------------
-            // 5) EVENTO INICIAL → prelogin
+            // 5) EVENTO prelogin
             // --------------------------------------------------------
             await _hub.Clients.Group("prelogin")
                 .SendAsync("agentLogin", provision);
 
-            Console.WriteLine($"[LOGIN] Enviado agentLogin → prelogin → agente:{agente.IdAgente}");
-
             // --------------------------------------------------------
-            // 6) GENERAR JWT
+            // 6) JWT
             // --------------------------------------------------------
-            var tokenHandler = new JwtSecurityTokenHandler();
             var keyBytes = Encoding.UTF8.GetBytes(_config["JwtSettings:Key"] ?? "");
-
             var claims = new List<Claim>
             {
                 new Claim("usuario", agente.Nombre ?? ""),
                 new Claim("idUsuario", agente.IdUsuario ?? ""),
                 new Claim("idAgente", agente.IdAgente),
-                new Claim("cliente", req.cliente ?? ""), 
+                new Claim("cliente", req.cliente ?? ""),
                 new Claim("servicio", req.servicio ?? ""),
                 new Claim("rol", agente.Rol ?? ""),
                 new Claim("extension", extension)
@@ -186,21 +159,17 @@ if (string.IsNullOrWhiteSpace(extension))
                 Audience = _config["JwtSettings:Audience"]
             };
 
-            var token = tokenHandler.CreateToken(tokenDescriptor);
-            string jwt = tokenHandler.WriteToken(token);
+            var token = new JwtSecurityTokenHandler().CreateToken(tokenDescriptor);
+            string jwt = new JwtSecurityTokenHandler().WriteToken(token);
 
             // --------------------------------------------------------
-            // 7) RE-LOGIN → grupo real del agente
+            // 7) EVENTO relogin
             // --------------------------------------------------------
-            string grupoAgente = $"agente:{agente.IdAgente}";
-
-            await _hub.Clients.Group(grupoAgente)
+            await _hub.Clients.Group($"agente:{agente.IdAgente}")
                 .SendAsync("agentReLogin", provision);
 
-            Console.WriteLine($"[RELOGIN] Enviado agentReLogin → {grupoAgente}");
-
             // --------------------------------------------------------
-            // 8) RESPUESTA FINAL AL CRM
+            // 8) RESPUESTA FINAL
             // --------------------------------------------------------
             return Ok(new
             {

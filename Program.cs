@@ -53,11 +53,12 @@ builder.Services.AddSignalR(options =>
 
 // ======================================================
 // BASE DE DATOS (MariaDB / MySQL)
+// Unificamos TODO en AgentContext usando "MySqlConnection"
 // ======================================================
-builder.Services.AddDbContext<AgentDbContext>(options =>
+builder.Services.AddDbContext<AgentContext>(options =>
     options.UseMySql(
         builder.Configuration.GetConnectionString("MySqlConnection"),
-        new MySqlServerVersion(new Version(10, 6)) // MariaDB 10.x
+        new MySqlServerVersion(new Version(10, 6))
     )
 );
 
