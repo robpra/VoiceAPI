@@ -1,0 +1,11 @@
+bin/
+obj/
+*.pfx
+*.pem
+*.key
+*.crt
+*.csr
+*.log
+/logs/
+/var/log/voiceapi/
+/publish/
