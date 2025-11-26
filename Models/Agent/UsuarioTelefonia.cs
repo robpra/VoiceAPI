@@ -1,3 +1,6 @@
+using System;
+using System.Collections.Generic;
+
 namespace VoiceAPI.Models.Agent
 {
     public class UsuarioTelefonia
@@ -12,8 +15,10 @@ namespace VoiceAPI.Models.Agent
         public string IdAgente { get; set; } = "";
         public string? Interno { get; set; }
 
-        // JSON en MariaDB (longtext)
-        public string? Servicios { get; set; }
+        // ============================================================
+        // AHORA Servicios ES UNA LISTA REAL → EF lo guarda como JSON
+        // ============================================================
+        public List<ServicioAgente> Servicios { get; set; } = new();
 
         public DateTime FechaRegistro { get; set; }
     }

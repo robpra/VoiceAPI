@@ -2,8 +2,8 @@ namespace VoiceAPI.Models.Agent
 {
     public class ServicioAgente
     {
-        public string idServicio { get; set; } = "";
-        public int prioridad { get; set; }
+        public string Servicio { get; set; } = string.Empty;
+        public int Penalty { get; set; }
     }
 }
 

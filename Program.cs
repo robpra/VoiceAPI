@@ -6,49 +6,22 @@ using VoiceAPI.Data;
 using VoiceAPI.Hubs;
 using VoiceAPI.Models.Auth;
 using VoiceAPI.Services;
+using VoiceAPI.Utils;   // <── NECESARIO para ServicioHelper
 
 var builder = WebApplication.CreateBuilder(args);
 
-// =============================
-// 1) HTTPS configurado en 5001
-// =============================
-builder.WebHost.ConfigureKestrel(options =>
-{
-    options.ListenAnyIP(5001, listenOptions =>
-    {
-        listenOptions.UseHttps(
-            "/etc/pki/tls/certs/pbx.ryd.pfx",
-            "1234"
-        );
-    });
-});
-
-
-//builder.WebHost.ConfigureKestrel(options =>
-//{
-//    options.ListenAnyIP(5001, listenOptions =>
-//    {
-//        listenOptions.UseHttps(
-//            "/etc/pki/tls/certs/pbx.ryd.crt",
-//            "/etc/ssl/private/pbx.ryd.key"
-//        );
-//    });
-//});
-
-
-
-// =============================
-// 2) CONFIG: JwtSettings
-// =============================
+// =================================================
+// 1) CONFIGURACIÓN DE JWT
+// =================================================
 var jwtSection = builder.Configuration.GetSection("JwtSettings");
 builder.Services.Configure<JwtSettings>(jwtSection);
 
 var jwtSettings = jwtSection.Get<JwtSettings>();
 var key = Encoding.UTF8.GetBytes(jwtSettings.Key);
 
-// =============================
-// 3) DB: MySQL / MariaDB
-// =============================
+// =================================================
+// 2) BASE DE DATOS (MySql/MariaDB)
+// =================================================
 builder.Services.AddDbContext<AgentContext>(options =>
 {
     options.UseMySql(
@@ -57,9 +30,44 @@ builder.Services.AddDbContext<AgentContext>(options =>
     );
 });
 
-// =============================
-// 4) AUTH + JWT
-// =============================
+// =================================================
+// 3) INYECCIÓN DE SERVICIOS
+// =================================================
+
+// SignalR
+builder.Services.AddSignalR();
+
+// JWT Service
+builder.Services.AddSingleton<JwtService>();
+
+// ServicioHelper (❗ FALTABA — CAUSABA TU ERROR)
+builder.Services.AddSingleton<ServicioHelper>();
+
+// Controllers
+builder.Services.AddControllers();
+
+// Swagger
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
+
+// =================================================
+// 4) CORS — REQUERIDO PARA DAVINCI + SIGNALR
+// =================================================
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowAll", policy =>
+    {
+        policy
+            .AllowAnyHeader()
+            .AllowAnyMethod()
+            .SetIsOriginAllowed(_ => true)
+            .AllowCredentials();
+    });
+});
+
+// =================================================
+// 5) AUTH + JWT
+// =================================================
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
@@ -72,13 +80,12 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateAudience = true,
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
-
             ValidIssuer = jwtSettings.Issuer,
             ValidAudience = jwtSettings.Audience,
             IssuerSigningKey = new SymmetricSecurityKey(key)
         };
 
-        // NECESARIO PARA JWT en WebSockets (SignalR)
+        // Necesario para JWT en WebSockets (SignalR)
         options.Events = new JwtBearerEvents
         {
             OnMessageReceived = context =>
@@ -89,7 +96,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 if (!string.IsNullOrEmpty(accessToken) &&
                     path.StartsWithSegments("/eventsHub"))
                 {
-                    context.Token = accessToken;
+                    context.Token = accessToken; // JWT viene por query
                 }
 
                 return Task.CompletedTask;
@@ -97,46 +104,11 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 
-// =============================
-// 5) SignalR + Services
-// =============================
-builder.Services.AddSignalR();
-builder.Services.AddSingleton<JwtService>();
-
-// =============================
-// 6) Controllers
-// =============================
-builder.Services.AddControllers();
-
-// =============================
-// 7) Swagger
-// =============================
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
-
-// =============================
-// 8) CORS — FIX REAL PARA SIGNALR
-// =============================
-builder.Services.AddCors(options =>
-{
-    options.AddPolicy("AllowAll", policy =>
-    {
-        policy
-            .AllowAnyHeader()
-            .AllowAnyMethod()
-            .SetIsOriginAllowed(origin => true)  // <---- CLAVE PARA WS
-            .AllowCredentials();
-    });
-});
-
-// =============================
+// =================================================
 // BUILD APP
-// =============================
+// =================================================
 var app = builder.Build();
 
-// =============================
-// Middleware
-// =============================
 app.UseSwagger();
 app.UseSwaggerUI();
 
@@ -144,18 +116,18 @@ app.UseHttpsRedirection();
 
 app.UseRouting();
 
-// CORS — DEBE IR ANTES DE AUTH/CONTROLLERS/HUBS
+// CORS debe ir ANTES de usar controllers y hubs
 app.UseCors("AllowAll");
 
 app.UseAuthentication();
 app.UseAuthorization();
 
-// Controllers
+// Controllers REST
 app.MapControllers();
 
-// Hub WebSocket
+// SignalR WebSocket Hub
 app.MapHub<EventsHub>("/eventsHub");
 
-// RUN
+// Run
 app.Run();
 

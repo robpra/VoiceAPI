@@ -1,11 +1,8 @@
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using VoiceAPI.Data;
 using VoiceAPI.Models.Agent;
-using VoiceAPI.Utils;
-using System.Text.Json;
 
-namespace VoiceAPI.Controllers.Agents
+namespace VoiceAPI.Models.Agent
 {
     [ApiController]
     [Route("api/[controller]")]
@@ -18,172 +15,56 @@ namespace VoiceAPI.Controllers.Agents
             _db = db;
         }
 
-        // ============================================================
-        // 1) CREATE AGENT
-        // ============================================================
+        // ===========================================================
+        // POST /api/agent/create
+        // ===========================================================
         [HttpPost("create")]
-        public async Task<IActionResult> CreateAgent([FromBody] CreateAgentRequest req)
+        public IActionResult CreateAgent([FromBody] CreateAgentRequest req)
         {
-            // -------------------------------
-            // VALIDACIÓN ROL
-            // -------------------------------
-            if (string.IsNullOrWhiteSpace(req.Rol))
+            var model = new UsuarioTelefonia
             {
-                return BadRequest(new { status = "error", message = "El campo rol es obligatorio." });
-            }
-
-            var rol = req.Rol.ToLower().Trim();
-
-            // -------------------------------
-            // VALIDACIÓN DATOS POR ROL
-            // -------------------------------
-            if (rol == "agente")
-            {
-                if (string.IsNullOrWhiteSpace(req.PbxId) ||
-                    string.IsNullOrWhiteSpace(req.Cliente) ||
-                    string.IsNullOrWhiteSpace(req.IdUsuario) ||
-                    string.IsNullOrWhiteSpace(req.IdAgente) ||
-                    req.Servicios == null)
-                {
-                    return BadRequest(new
-                    {
-                        status = "error",
-                        message = "Para rol 'agente' se requieren: pbxId, cliente, idUsuario, idAgente, servicios."
-                    });
-                }
-            }
-            else if (rol == "administrativo")
-            {
-                if (string.IsNullOrWhiteSpace(req.PbxId) ||
-                    string.IsNullOrWhiteSpace(req.Cliente) ||
-                    string.IsNullOrWhiteSpace(req.IdUsuario) ||
-                    string.IsNullOrWhiteSpace(req.Nombre) ||
-                    string.IsNullOrWhiteSpace(req.Interno))
-                {
-                    return BadRequest(new
-                    {
-                        status = "error",
-                        message = "Para rol 'administrativo' se requieren: pbxId, cliente, idUsuario, nombre, interno."
-                    });
-                }
-            }
-            else
-            {
-                return BadRequest(new { status = "error", message = "Rol inválido." });
-            }
-
-            // -------------------------------
-            // EXISTE USUARIO?
-            // -------------------------------
-            bool existe = await _db.UsuariosTelefonia
-                .AnyAsync(u => u.IdUsuario == req.IdUsuario);
-
-            if (existe)
-            {
-                return Conflict(new
-                {
-                    status = "error",
-                    message = "idUsuario ya existe en el sistema."
-                });
-            }
-
-            // -------------------------------
-            // PREPARAR SERVICIOS (JSON)
-            // -------------------------------
-            string serviciosJson = "[]";
-            if (req.Servicios != null)
-                serviciosJson = ServicioHelper.ToJson(req.Servicios);
-
-            // -------------------------------
-            // CREAR OBJETO DB
-            // -------------------------------
-            var nuevo = new UsuarioTelefonia
-            {
-                PbxId = req.PbxId,
-                Cliente = req.Cliente,
                 IdUsuario = req.IdUsuario,
+                IdAgente = req.IdAgente,
                 Nombre = req.Nombre,
                 Apellido = req.Apellido,
-                Rol = rol,
-                IdAgente = req.IdAgente ?? "",
-                Interno = req.Interno,
-                Servicios = serviciosJson,
-                FechaRegistro = DateTime.Now
+                Rol = req.Rol,
+                Cliente = req.Cliente,
+                PbxId = req.PbxId,
+
+                // Guardamos la lista como List<ServicioAgente>
+                Servicios = req.Servicios
             };
 
-            _db.UsuariosTelefonia.Add(nuevo);
-            await _db.SaveChangesAsync();
+            _db.UsuariosTelefonia.Add(model);
+            _db.SaveChanges();
 
-            return Ok(new
-            {
-                status = "ok",
-                message = "Agente creado correctamente.",
-                id = nuevo.Id
-            });
+            return Ok(model);
         }
 
-        // ============================================================
-        // 2) UPDATE AGENT
-        // ============================================================
-        [HttpPut("update/{idUsuario}")]
-        public async Task<IActionResult> UpdateAgent(string idUsuario, [FromBody] UpdateAgentRequest req)
+        // ===========================================================
+        // PUT /api/agent/update
+        // ===========================================================
+        [HttpPut("update")]
+        public IActionResult UpdateAgent([FromBody] UpdateAgentRequest req)
         {
-            var agente = await _db.UsuariosTelefonia
-                .FirstOrDefaultAsync(a => a.IdUsuario == idUsuario);
+            var existing = _db.UsuariosTelefonia.FirstOrDefault(x => x.IdUsuario == req.IdUsuario);
 
-            if (agente == null)
-            {
-                return NotFound(new { status = "error", message = "Usuario no encontrado." });
-            }
+            if (existing == null)
+                return NotFound(new { error = "Agente no encontrado" });
 
-            // -------------------------------
-            // APLICAR CAMPOS OPCIONALES
-            // -------------------------------
-            if (req.Nombre != null) agente.Nombre = req.Nombre;
-            if (req.Apellido != null) agente.Apellido = req.Apellido;
-            if (req.Interno != null) agente.Interno = req.Interno;
-            if (req.IdAgente != null) agente.IdAgente = req.IdAgente;
+            // Actualización de datos
+            existing.Nombre = req.Nombre;
+            existing.Apellido = req.Apellido;
+            existing.Rol = req.Rol;
+            existing.Cliente = req.Cliente;
+            existing.PbxId = req.PbxId;
 
-            // Rol puede cambiar
-            if (req.Rol != null) agente.Rol = req.Rol;
+            // Guardamos la nueva lista de servicios
+            existing.Servicios = req.Servicios;
 
-            // Servicios → JSON siempre válido
-            if (req.Servicios != null)
-            {
-                agente.Servicios = ServicioHelper.ToJson(req.Servicios);
-            }
+            _db.SaveChanges();
 
-            await _db.SaveChangesAsync();
-
-            return Ok(new
-            {
-                status = "ok",
-                message = "Agente actualizado."
-            });
-        }
-
-        // ============================================================
-        // 3) DELETE AGENT
-        // ============================================================
-        [HttpDelete("delete/{idUsuario}")]
-        public async Task<IActionResult> DeleteAgent(string idUsuario)
-        {
-            var agente = await _db.UsuariosTelefonia
-                .FirstOrDefaultAsync(a => a.IdUsuario == idUsuario);
-
-            if (agente == null)
-            {
-                return NotFound(new { status = "error", message = "Usuario no encontrado." });
-            }
-
-            _db.UsuariosTelefonia.Remove(agente);
-            await _db.SaveChangesAsync();
-
-            return Ok(new
-            {
-                status = "ok",
-                message = "Agente eliminado correctamente."
-            });
+            return Ok(existing);
         }
     }
 }
