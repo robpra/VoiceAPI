@@ -1,16 +1,22 @@
+using System.Collections.Generic;
+
 namespace VoiceAPI.Models.Agent
 {
     public class CreateAgentRequest
     {
-        public string IdUsuario { get; set; } = "";
-        public string IdAgente { get; set; } = "";
-        public string Nombre { get; set; } = "";
-        public string Apellido { get; set; } = "";
-        public string Rol { get; set; } = "";
-        public string Cliente { get; set; } = "";
-        public string PbxId { get; set; } = "";        // ← NECESARIO
-        public string Interno { get; set; } = "";      // ← NECESARIO
-        public List<ServicioAgente> Servicios { get; set; } = new();
+        public string pbxId { get; set; } = string.Empty;
+        public string cliente { get; set; } = string.Empty;
+        public string idUsuario { get; set; } = string.Empty;
+        public string nombre { get; set; } = string.Empty;
+        public string apellido { get; set; } = string.Empty;
+        public string rol { get; set; } = string.Empty;
+
+        // solo para rol = agente
+        public string? idAgente { get; set; }
+        public List<ServicioAgente>? servicios { get; set; }
+
+        // solo para rol = administrativo
+        public string? interno { get; set; }
     }
 }
 
