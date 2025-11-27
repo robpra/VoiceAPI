@@ -94,7 +94,16 @@ builder.Services.AddDbContext<AgentContext>(options =>
 // SERVICES
 // ===============================
 builder.Services.AddSingleton<JwtService>();
+
+builder.Services.AddSingleton<VoiceLogger>(); 
+
 builder.Services.AddSignalR();
+
+
+
+// NECESARIO PARA HookController
+builder.Services.AddHttpClient();
+
 
 // ===============================
 // BUILD APP
