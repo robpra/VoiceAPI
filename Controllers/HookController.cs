@@ -1,8 +1,10 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
-using Newtonsoft.Json;
 using System.Text;
+using System.Text.Json;
 using VoiceAPI.Hubs;
+using VoiceAPI.Models.Hooks;
+using VoiceAPI.Services;
 
 namespace VoiceAPI.Controllers
 {
@@ -10,81 +12,83 @@ namespace VoiceAPI.Controllers
     [Route("api/[controller]")]
     public class HookController : ControllerBase
     {
-        private readonly IConfiguration _config;
+        private readonly ILogger<HookController> _logger;
         private readonly IHubContext<EventsHub> _hub;
-        private readonly HttpClient _http;
+        private readonly IHttpClientFactory _http;
+        private readonly VoiceLogger _vlog;
 
-        public HookController(IConfiguration config, IHubContext<EventsHub> hub)
+        public HookController(
+            ILogger<HookController> logger,
+            IHubContext<EventsHub> hub,
+            IHttpClientFactory http,
+            VoiceLogger vlog)
         {
-            _config = config;
+            _logger = logger;
             _hub = hub;
-            _http = new HttpClient();
+            _http = http;
+            _vlog = vlog;
         }
 
+        // ===========================================================
+        // POST /api/hook/event   ← recibe hooks reales del softphone
+        // ===========================================================
         [HttpPost("event")]
-        public async Task<IActionResult> ReceiveHook([FromBody] object rawPayload)
+        public async Task<IActionResult> ReceiveHook([FromBody] HookEventRequest hook)
         {
-            // Convertimos raw JSON a string
-            string json = rawPayload.ToString();
+            if (hook == null)
+                return BadRequest(new { error = "JSON inválido o vacío" });
 
-            // Extraemos el evento de forma segura
-            dynamic root = JsonConvert.DeserializeObject<dynamic>(json);
-            string evento = root.evento != null ? (string)root.evento : "undefined";
+            _logger.LogInformation("📩 HOOK recibido: {evt} | Agente={ag} | Usuario={u} | Servicio={svc}",
+                hook.Evento, hook.Agente, hook.IdUsuario, hook.Servicio);
 
-            string destino = _config["Hooks:Destino"];
-            if (string.IsNullOrWhiteSpace(destino))
-                return StatusCode(500, new { status = "error", message = "Hooks.Destino no configurado." });
+            // ===========================================================
+            // 1) AUDITORÍA
+            // ===========================================================
+            string audit = VoiceLogger.Audit("HOOK/" + hook.Evento,
+$@"Agente={hook.Agente}
+Usuario={hook.IdUsuario}
+Servicio={hook.Servicio}
+Origen={hook.Origen}
+Destino={hook.Destino}
+Tipo={hook.Tipo}");
 
-            // --------------------------------------------------------
-            // LOG LOCAL
-            // --------------------------------------------------------
+            _vlog.Hooks(audit);
+
+            // ===========================================================
+            // 2) Reenviar al navegador del agente
+            // ===========================================================
+            if (!string.IsNullOrWhiteSpace(hook.Agente))
+            {
+                string group = $"AGENTE_{hook.Agente}";
+                await _hub.Clients.Group(group).SendAsync("hook", hook);
+
+                _logger.LogInformation("📤 Hook reenviado por SignalR → {group}", group);
+            }
+
+            // ===========================================================
+            // 3) Reenviar al CRM externo
+            // ===========================================================
             try
             {
-                Directory.CreateDirectory("/var/log/voiceapi");
-
-                var logLine =
-                    $"{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} | {evento} | {json}";
-
-                await System.IO.File.AppendAllTextAsync(
-                    "/var/log/voiceapi/hooks.log",
-                    logLine + "\n"
-                );
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"❌ Error escribiendo log local: {ex.Message}");
-            }
-
-            // --------------------------------------------------------
-            // 1) Reenviar RAW a Davinci/PHP
-            // --------------------------------------------------------
-            HttpResponseMessage resp;
-            try
-            {
+                var json = JsonSerializer.Serialize(hook);
                 var content = new StringContent(json, Encoding.UTF8, "application/json");
-                resp = await _http.PostAsync(destino, content);
+
+                var client = _http.CreateClient();
+                client.Timeout = TimeSpan.FromSeconds(5);
+
+                // URL del CRM (puede moverse a appsettings.json)
+                string crmUrl = "https://davinci.crm/hook/voiceapi";
+
+                var res = await client.PostAsync(crmUrl, content);
+                _logger.LogInformation("📡 Hook enviado al CRM: {code}", res.StatusCode);
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"❌ Error reenviando hook: {ex.Message}");
-                return StatusCode(500, new { status = "error", message = "Error reenviando hook" });
+                _logger.LogError(ex, "❌ Error enviando hook al CRM");
+                _vlog.Error("[CRM ERROR] " + ex.ToString());
             }
 
-            // --------------------------------------------------------
-            // 2) Emitir por SignalR como JSON STRING (no dynamic)
-            // --------------------------------------------------------
-            await _hub.Clients.Group("agentes")
-                .SendAsync("hookEvent", json);
-
-            // --------------------------------------------------------
-            // 3) Respuesta final al softphone
-            // --------------------------------------------------------
-            return Ok(new
-            {
-                status = "ok",
-                forwardedTo = destino,
-                responseCode = (int)resp.StatusCode
-            });
+            return Ok(new { ok = true, recibido = hook.Evento });
         }
     }
 }

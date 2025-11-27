@@ -1,97 +1,81 @@
 using Microsoft.AspNetCore.SignalR;
-using Microsoft.Extensions.Logging;
-using System;
-using System.Collections.Concurrent;
-using System.Threading.Tasks;
 
 namespace VoiceAPI.Hubs
 {
     public class EventsHub : Hub
     {
-        private readonly ILogger<EventsHub> _logger;
-
-        // Tabla de instancias activas → instanceId → connectionId
-        private static readonly ConcurrentDictionary<string, string> _instancias =
-            new ConcurrentDictionary<string, string>();
-
-        public EventsHub(ILogger<EventsHub> logger)
-        {
-            _logger = logger;
-        }
-
+        // ===========================================================
+        // Cliente conectado
+        // ===========================================================
         public override async Task OnConnectedAsync()
         {
-            string connectionId = Context.ConnectionId;
-            string instanceId = Context.GetHttpContext()?.Request.Query["instanceId"];
+            string connId = Context.ConnectionId;
 
-            _logger.LogInformation("────────────────────────────────────────────");
-            _logger.LogInformation("🔌 Nueva conexión SignalR");
-            _logger.LogInformation("→ ConnectionId : {0}", connectionId);
-            _logger.LogInformation("→ instanceId   : {0}", instanceId);
+            Console.WriteLine($"🔌 Cliente conectado: {connId}");
 
-            if (!string.IsNullOrEmpty(instanceId))
-            {
-                _instancias[instanceId] = connectionId;
-
-                string group = $"instancia:{instanceId}";
-                await Groups.AddToGroupAsync(connectionId, group);
-                _logger.LogInformation("✔ Unido al grupo: {0}", group);
-            }
-
-            await Groups.AddToGroupAsync(connectionId, "prelogin");
-            _logger.LogInformation("✔ Unido al grupo prelogin");
-            _logger.LogInformation("────────────────────────────────────────────");
+            // Primera etapa: siempre entra a prelogin
+            await Groups.AddToGroupAsync(connId, "prelogin");
+            Console.WriteLine($"👥 {connId} agregado a prelogin");
 
             await base.OnConnectedAsync();
         }
 
+        // ===========================================================
+        // Cliente desconectado
+        // ===========================================================
         public override async Task OnDisconnectedAsync(Exception? ex)
         {
-            string connectionId = Context.ConnectionId;
-
-            foreach (var kvp in _instancias)
-            {
-                if (kvp.Value == connectionId)
-                {
-                    _instancias.TryRemove(kvp.Key, out _);
-                    _logger.LogWarning("❌ Instancia desconectada: {0}", kvp.Key);
-                    break;
-                }
-            }
-
-            _logger.LogWarning("❌ Cliente desconectado: {0}", connectionId);
-            _logger.LogInformation("────────────────────────────────────────────");
-
+            string connId = Context.ConnectionId;
+            Console.WriteLine($"❌ Cliente desconectado: {connId}");
             await base.OnDisconnectedAsync(ex);
         }
 
-        public Task JoinGroup(string groupName)
+        // ===========================================================
+        // JoinGroup genérico (instancia, prelogin, etc)
+        // ===========================================================
+        public async Task JoinGroup(string groupName)
         {
-            string connectionId = Context.ConnectionId;
-            _logger.LogInformation("➡ JoinGroup solicitado → {0} ({1})", groupName, connectionId);
-            return Groups.AddToGroupAsync(connectionId, groupName);
+            string connId = Context.ConnectionId;
+
+            await Groups.AddToGroupAsync(connId, groupName);
+            Console.WriteLine($"➡ {connId} unido al grupo: {groupName}");
         }
 
-        public Task BindAgent(string idAgente)
+        // ===========================================================
+        // LeaveGroup genérico
+        // ===========================================================
+        public async Task LeaveGroup(string groupName)
         {
-            string connectionId = Context.ConnectionId;
-            string group = $"agente:{idAgente}";
-            _logger.LogInformation("➡ BindAgent → {0} ({1})", group, connectionId);
-
-            return Groups.AddToGroupAsync(connectionId, group);
+            string connId = Context.ConnectionId;
+            await Groups.RemoveFromGroupAsync(connId, groupName);
+            Console.WriteLine($"⬅ {connId} salió del grupo: {groupName}");
         }
 
-        // ⭐ MÉTODO NECESARIO PARA AuthController
-        public static string? GetLastActiveInstance()
+        // ===========================================================
+        // BINDAGENTE → GRUPO FINAL DEL AGENTE
+        //
+        // EJEMPLO desde Javascript:
+        //    connection.invoke("BindAgent", "2020")
+        //
+        // Nombre de grupo usado por tu versión vieja: AGENTE_2020
+        // ===========================================================
+        public async Task BindAgent(string idAgente)
         {
-            if (_instancias.IsEmpty)
-                return null;
+            string connId = Context.ConnectionId;
 
-            string last = null;
-            foreach (var kvp in _instancias)
-                last = kvp.Key;
+            string group = $"AGENTE_{idAgente}";
 
-            return last;
+            await Groups.AddToGroupAsync(connId, group);
+
+            Console.WriteLine($"🎧 {connId} asignado a grupo de agente {group}");
+        }
+
+        // ===========================================================
+        // DEBUG
+        // ===========================================================
+        public string Ping()
+        {
+            return $"pong:{Context.ConnectionId}";
         }
     }
 }

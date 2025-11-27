@@ -1,44 +1,51 @@
-using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
-using VoiceAPI.Models.Auth;
 
 namespace VoiceAPI.Services
 {
     public class JwtService
     {
-        private readonly JwtSettings _settings;
+        private readonly IConfiguration _config;
 
-        public JwtService(IOptions<JwtSettings> settings)
+        public JwtService(IConfiguration config)
         {
-            _settings = settings.Value;
+            _config = config;
         }
 
-        public string GenerateToken(string usuario, string idUsuario, string idAgente, string servicio, string rol, string cliente, string pbxId)
+        public string GenerateToken(
+            string usuario,
+            string idUsuario,
+            string idAgente,
+            string servicio,
+            string rol,
+            string pbx,
+            string cliente)
         {
+            var keyString = _config["JwtSettings:Key"] ?? "";
+            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(keyString));
+            var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+
             var claims = new[]
             {
                 new Claim("usuario", usuario),
                 new Claim("idUsuario", idUsuario),
-                new Claim("idAgente", idAgente ?? ""),
+                new Claim("idAgente", idAgente),
                 new Claim("servicio", servicio),
                 new Claim("rol", rol),
-                new Claim("cliente", cliente),
-                new Claim("pbxId", pbxId)
+                new Claim("pbx", pbx),
+                new Claim("cliente", cliente)
             };
 
-            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_settings.Key));
-            var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
-
-            var expires = DateTime.UtcNow.AddHours(_settings.ExpiryHours);
+            var expiry = int.Parse(_config["JwtSettings:ExpiryHours"] ?? "8");
 
             var token = new JwtSecurityToken(
-                issuer: _settings.Issuer,
-                audience: _settings.Audience,
+                issuer: _config["JwtSettings:Issuer"],
+                audience: _config["JwtSettings:Audience"],
                 claims: claims,
-                expires: expires,
+                expires: DateTime.UtcNow.AddHours(expiry),
                 signingCredentials: creds
             );
 

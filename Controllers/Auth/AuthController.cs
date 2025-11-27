@@ -14,25 +14,19 @@ namespace VoiceAPI.Controllers.Auth
     public class AuthController : ControllerBase
     {
         private readonly JwtService _jwt;
-        private readonly ServicioHelper _servicioHelper;
         private readonly IHubContext<EventsHub> _hub;
         private readonly ILogger<AuthController> _logger;
 
         public AuthController(
             JwtService jwt,
-            ServicioHelper servicioHelper,
             IHubContext<EventsHub> hub,
             ILogger<AuthController> logger)
         {
             _jwt = jwt;
-            _servicioHelper = servicioHelper;
             _hub = hub;
             _logger = logger;
         }
 
-        // ===========================================================
-        // POST /api/auth/login
-        // ===========================================================
         [HttpPost("login")]
         public async Task<IActionResult> Login([FromBody] LoginRequest req)
         {
@@ -42,28 +36,27 @@ namespace VoiceAPI.Controllers.Auth
             _logger.LogInformation("IdUsuario   : {0}", req.IdUsuario);
             _logger.LogInformation("IdAgente    : {0}", req.IdAgente);
             _logger.LogInformation("Servicio    : {0}", req.Servicio);
-            _logger.LogInformation("Cliente     : {0}", req.Cliente);
-            _logger.LogInformation("Rol         : {0}", req.Rol);
             _logger.LogInformation("────────────────────────────────────────────");
 
-            // Buscar PBX + Cliente
-            var (pbx, cliente) = _servicioHelper.GetClusterAndCliente(req.Servicio);
+            // PBX por servicio (tu lógica original)
+            var (pbx, clienteDetectado) = ServicioHelper.GetClusterByService(req.Servicio);
 
             if (pbx == null)
             {
                 _logger.LogError("❌ Servicio {0} NO pertenece a ninguna PBX", req.Servicio);
-                return BadRequest(new { error = "Servicio no pertenece a ninguna PBX" });
+                return BadRequest(new { ok = false, error = "Servicio no pertenece a ninguna PBX" });
             }
 
-            _logger.LogInformation("✔ Servicio {0} → PBX={1} Cliente={2}", req.Servicio, pbx.Id, cliente);
+            _logger.LogInformation("✔ Servicio {0} → PBX={1} Cliente={2}",
+               req.Servicio, pbx.Id, clienteDetectado);
 
-            // Generar JWT
+            // JWT
             string token = _jwt.GenerateToken(
                 req.Usuario,
                 req.IdUsuario,
                 req.IdAgente,
                 req.Servicio,
-                req.Cliente,
+                clienteDetectado,
                 pbx.Id,
                 req.Rol
             );
@@ -71,15 +64,15 @@ namespace VoiceAPI.Controllers.Auth
             _logger.LogInformation("✔ JWT generado correctamente.");
             _logger.LogInformation("🔁 Preparando PROVISIONING…");
 
-            // Payload de provisioning
-            var provisioningPayload = new
+            // PROVISIONING
+            var payload = new
             {
                 evento = "auth.provisioning",
                 usuario = req.Usuario,
                 idUsuario = req.IdUsuario,
                 idAgente = req.IdAgente,
                 servicio = req.Servicio,
-                cliente = cliente,
+                cliente = clienteDetectado,
                 rol = req.Rol,
                 pbx = pbx.Id,
                 host = pbx.Host,
@@ -88,26 +81,33 @@ namespace VoiceAPI.Controllers.Auth
                 token = token
             };
 
-            // ENVÍO A PRELOGIN (si el navegador aún no conoce idAgente)
+            // 1) prelogin (primera carga)
             await _hub.Clients.Group("prelogin")
-                .SendAsync("provision", provisioningPayload);
+                .SendAsync("provision", payload);
+            _logger.LogInformation("✔ Provision enviado → prelogin");
 
-            _logger.LogInformation("✔ Provision enviado al grupo prelogin");
+            // 2) instancia (si existe)
+            if (!string.IsNullOrWhiteSpace(req.InstanceId))
+            {
+                await _hub.Clients.Group($"instancia:{req.InstanceId}")
+                    .SendAsync("provision", payload);
 
-            // ENVÍO DIRECTO AL AGENTE (una vez que se una desde el navegador)
+                _logger.LogInformation("✔ Provision enviado → instancia:{0}", req.InstanceId);
+            }
+
+            // 3) agente (después de BindAgent)
             await _hub.Clients.Group($"AGENTE_{req.IdAgente}")
-                .SendAsync("provision", provisioningPayload);
+                .SendAsync("provision", payload);
 
-            _logger.LogInformation("✔ Provision enviado al grupo AGENTE_{0}", req.IdAgente);
+            _logger.LogInformation("✔ Provision enviado → agente:{0}", req.IdAgente);
             _logger.LogInformation("────────────────────────────────────────────");
 
             return Ok(new
             {
                 ok = true,
-                token = token,
-                agente = req.IdAgente,
-                servicio = req.Servicio,
-                pbx = pbx.Id
+                jwt = token,
+                pbx = pbx.Id,
+                servicio = req.Servicio
             });
         }
     }

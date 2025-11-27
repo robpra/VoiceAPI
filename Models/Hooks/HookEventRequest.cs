@@ -2,24 +2,14 @@ namespace VoiceAPI.Models.Hooks
 {
     public class HookEventRequest
     {
-        public string evento { get; set; }
-
-        // Datos del agente
-        public string? idUsuario { get; set; }
-        public string? usuario { get; set; }
-        public string? agente { get; set; }
-        public string? cliente { get; set; }
-        public string? servicio { get; set; }
-
-        // Datos de llamada (opcional)
-        public string? tipo { get; set; }
-        public string? origen { get; set; }
-        public string? destino { get; set; }
-
-        // Metadatos
-        public string? timestamp { get; set; }
-        public string uuid { get; set; }
-        public int sequence { get; set; }
+        public string Evento { get; set; } = "";
+        public string Agente { get; set; } = "";
+        public string IdUsuario { get; set; } = "";
+        public string Servicio { get; set; } = "";
+        public string Origen { get; set; } = "";
+        public string Destino { get; set; } = "";
+        public string Tipo { get; set; } = "";
+        public string Uuid { get; set; } = "";
     }
 }
 
